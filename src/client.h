@@ -172,7 +172,6 @@ public:
 
       std::vector <string> getObjectAttribute(string object, string attribute);
 
-      std::vector <string> searchNew(string search_base, string filter, int scope, const std::vector<string> &attributes);
       std::vector <string> searchDN(string search_base, string filter, int scope);
       std::map < string, std::map < string, std::vector<string> > > search(string OU, int scope, string filter, const std::vector <string> &attributes);
 

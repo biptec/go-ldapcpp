@@ -1,7 +1,7 @@
 package ldapcpp
 
-// #cgo CPPFLAGS: -DOPENLDAP -DKRB5 -Wno-deprecated
-// #cgo LDFLAGS: -L. -lclient -lstdc++ -lldap -lsasl2 -lstdc++ -llber -lresolv -lkrb5
+// #cgo CPPFLAGS: -Isrc -DOPENLDAP -DKRB5 -Wno-deprecated
+// #cgo LDFLAGS: -Lbuild -lclient -lstdc++ -lldap -lsasl2 -lstdc++ -llber -lresolv -lkrb5
 // #include <ldap.h>
 import "C"
 
@@ -28,7 +28,7 @@ type Error struct {
 	code int
 }
 
-type ConnParams struct {
+type ClientConnParams struct {
 	Domain      string
 	Site        string
 	Uries       []string
@@ -45,7 +45,7 @@ type ConnParams struct {
 	Timelimit  int
 }
 
-func DefaultConnParams() (params ConnParams) {
+func DefaultClientConnParams() (params ClientConnParams) {
 	params.Nettimeout = -1
 	params.Timelimit = -1
 	params.Secured = true
@@ -139,10 +139,10 @@ func New() {
 }
 
 func Delete() {
-	DeleteAdclient(ad)
+	DeleteClient(ad)
 }
 
-func Login(_params ConnParams) (err error) {
+func Login(_params ClientConnParams) (err error) {
 	defer catch(&err)
 
 	params := NewConnParams()
@@ -174,7 +174,7 @@ func Login(_params ConnParams) (err error) {
 func LoginOld(uri interface{}, user string, passwd string, sb string, secured bool) (err error) {
 	defer catch(&err)
 
-	args := DefaultConnParams()
+	args := DefaultClientConnParams()
 	args.Binddn = user
 	args.Bindpw = passwd
 	args.Search_base = sb
@@ -226,12 +226,6 @@ func RenameDN(dn string, new_rdn string) (err error) {
 func GetObjectDN(object string) (result string, err error) {
 	defer catch(&err)
 	result = ad.GetObjectDN(object)
-	return
-}
-
-func IfDialinUser(user string) (result bool, err error) {
-	defer catch(&err)
-	result = ad.IfDialinUser(user)
 	return
 }
 
