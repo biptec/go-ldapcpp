@@ -4,7 +4,7 @@
 /*
   Active Directory class.
 
-  client::login can throw BindException on errors.
+  client::bind can throw BindException on errors.
   all search functions can throw SearchException on errors.
   all modify functions can throw both SearchException and OperationalException on errors.
    text description will be in 'msg' property
@@ -20,18 +20,18 @@ client::client() {
 
 client::~client() {
 /*
-  Destructor, to automaticaly free initial values allocated at login().
+  Destructor, to automaticaly free initial values allocated at bind().
 */
-    logout(ds);
+    close(ds);
 }
 
-void client::logout(LDAP *ds) {
+void client::close(LDAP *ds) {
     if (ds != NULL) {
         ldap_unbind_ext(ds, NULL, NULL);
     }
 }
 
-void client::login(connParams _params) {
+void client::bind(clientConnParams _params) {
     ldap_prefix = _params.use_ldaps ? "ldaps" : "ldap";
 
     if (!_params.uries.empty()) {
@@ -42,7 +42,7 @@ void client::login(connParams _params) {
                 _params.uri = *it;
             }
             try {
-                login(&ds, _params);
+                bind(&ds, _params);
                 params = _params;
                 return;
             }
@@ -60,50 +60,44 @@ void client::login(connParams _params) {
             }
         }
         throw BindException("No suitable connection uries found", PARAMS_ERROR);
-    } else if (!_params.domain.empty()) {
-        if (_params.search_base.empty()) {
-            _params.search_base = domain2dn(_params.domain);
-        }
-        _params.uries = get_ldap_servers(_params.domain, _params.site);
-        login(_params);
     } else {
         throw BindException("No suitable connection params found", PARAMS_ERROR);
     }
 }
 
-void client::login(vector <string> uries, string binddn, string bindpw, string search_base, bool secured) {
+void client::bind(vector <string> uries, string binddn, string bindpw, string search_base, bool secured) {
 /*
-  Wrapper around login to support list of uries
+  Wrapper around bind to support list of uries
 */
-    connParams _params;
+    clientConnParams _params;
     _params.uries = uries;
     _params.binddn = binddn;
     _params.bindpw = bindpw;
     _params.search_base = search_base;
     _params.secured = secured;
-    login(_params);
+    bind(_params);
 }
 
-void client::login(string _uri, string binddn, string bindpw, string search_base, bool secured) {
+void client::bind(string _uri, string binddn, string bindpw, string search_base, bool secured) {
 /*
-  Wrapper around login to fill LDAP* structure
+  Wrapper around bind to fill LDAP* structure
 */
-    connParams _params;
+    clientConnParams _params;
     _params.uries.push_back(_uri);
     _params.binddn = binddn;
     _params.bindpw = bindpw;
     _params.search_base = search_base;
     _params.secured = secured;
-    login(_params);
+    bind(_params);
 }
 
-void client::login(LDAP **ds, connParams& _params) {
+void client::bind(LDAP **ds, clientConnParams& _params) {
 /*
   To set various LDAP options and bind to LDAP server.
   It set private pointer to LDAP connection identifier - ds.
   It returns nothing if operation was successfull, throws BindException otherwise.
 */
-    logout(*ds);
+    close(*ds);
 
     int result, version, bindresult = -1;
 
@@ -218,7 +212,7 @@ void client::login(LDAP **ds, connParams& _params) {
     }
 }
 
-map < string, map < string, vector<string> > > client::search(string OU, int scope, string filter, const vector <string> &attributes) {
+map < string, map < string, vector<string> > > client::search(string DN, int scope, string filter, const vector <string> &attributes) {
 /*
   General search function.
   It returns map with users found with 'filter' with specified 'attributes'.
@@ -271,7 +265,7 @@ map < string, map < string, vector<string> > > client::search(string OU, int sco
         serverctrls[0] = pagecontrol;
 
         /* Search for entries in the directory using the parmeters.       */
-        result = ldap_search_ext_s(ds, OU.c_str(), scope, filter.c_str(), attrs, attrsonly, serverctrls, NULL, NULL, LDAP_NO_LIMIT, &res);
+        result = ldap_search_ext_s(ds, DN.c_str(), scope, filter.c_str(), attrs, attrsonly, serverctrls, NULL, NULL, LDAP_NO_LIMIT, &res);
         if ((result != LDAP_SUCCESS) & (result != LDAP_PARTIAL_RESULTS)) {
             error_msg = "Error in paged ldap_search_ext_s: ";
             error_msg.append(ldap_err2string(result));
@@ -413,29 +407,86 @@ vector <string> client::searchDN(string search_base, string filter, int scope) {
     return result;
 }
 
-string client::getObjectDN(string object) {
+
+vector <string> client::search(string search_base, string filter, int scope, const vector <string> &attributes) {
 /*
-  It returns user DN by short name.
+  It returns vector with DNs found with 'filter'.
 */
-    if (ifDNExists(object)) {
-        return object;
-    } else {
-        replace(object, "(", "\\(");
-        replace(object, ")", "\\)");
-        vector <string> dn = searchDN(params.search_base, "(sAMAccountName=" + object + ")", LDAP_SCOPE_SUBTREE);
-        return dn[0];
+    map < string, map < string, vector<string> > > search_result;
+
+
+    search_result = search(search_base.c_str(), scope, filter, attributes);
+
+    vector <string> result;
+
+    map < string, map < string, vector<string> > >::iterator res_it;
+    for ( res_it=search_result.begin() ; res_it != search_result.end(); ++res_it ) {
+        string dn = (*res_it).first;
+        result.push_back(dn);
+    }
+
+    return result;
+}
+
+void client::modify(string dn, int mod_op, string attribute, vector <string> list) {
+/*
+  It performs an object modification operation (short_name/DN).
+  It removes list from attribute.
+  It returns nothing if operation was successfull, throw OperationalException - otherwise.
+*/
+    if (ds == NULL) throw SearchException("Failed to use LDAP connection handler", LDAP_CONNECTION_ERROR);
+
+    LDAPMod *attrs[2];
+    LDAPMod attr;
+    int result;
+    string error_msg;
+    char** values = new char*[list.size() + 1];
+    size_t i;
+
+    for (i = 0; i < list.size(); ++i) {
+        values[i] = new char[list[i].size() + 1];
+        strcpy(values[i], list[i].c_str());
+    }
+    values[i] = NULL;
+
+    attr.mod_op = mod_op;
+    attr.mod_type = strdup(attribute.c_str());
+    attr.mod_values = values;
+
+    attrs[0] = &attr;
+    attrs[1] = NULL;
+
+    result = ldap_modify_ext_s(ds, dn.c_str(), attrs, NULL, NULL);
+    if (result != LDAP_SUCCESS) {
+        error_msg = "Error in modify '" + dn + "', ldap_modify_ext_s: ";
+        error_msg.append(ldap_err2string(result));
+        throw OperationalException(error_msg, result);
+    }
+    for (i = 0; i < list.size(); ++i) {
+        delete[] values[i];
+    }
+    delete[] values;
+    free(attr.mod_type);
+}
+
+void client::modifyDN(string dn, string newrdn, string newparent, int deleteoldrdn) {
+    if (ds == NULL) throw SearchException("Failed to use LDAP connection handler", LDAP_CONNECTION_ERROR);
+
+    int result = ldap_rename_s(ds, dn.c_str(), newrdn.c_str(), newparent.c_str(), deleteoldrdn, NULL, NULL);
+    if (result != LDAP_SUCCESS){
+        string error_msg = "Error in mod_rename, ldap_rename_s: ";
+        error_msg.append(ldap_err2string(result));
+        throw OperationalException(error_msg,result);
     }
 }
 
-void client::mod_add(string object, string attribute, string value) {
+void client::mod_add(string dn, string attribute, string value) {
 /*
   It performs generic LDAP_MOD_ADD operation on object (short_name/DN).
   It adds value to attribute.
   It returns nothing if operation was successfull, throw OperationalException - otherwise.
 */
     if (ds == NULL) throw SearchException("Failed to use LDAP connection handler", LDAP_CONNECTION_ERROR);
-
-    string dn = getObjectDN(object);
 
     LDAPMod *attrs[2];
     LDAPMod attr;
@@ -463,15 +514,13 @@ void client::mod_add(string object, string attribute, string value) {
     }
 }
 
-void client::mod_delete(string object, string attribute, string value) {
+void client::mod_delete(string dn, string attribute, string value) {
 /*
   It performs generic LDAP_MOD_DELETE operation on object (short_name/DN).
   It removes value from attribute.
   It returns nothing if operation was successfull, throw OperationalException - otherwise.
 */
     if (ds == NULL) throw SearchException("Failed to use LDAP connection handler", LDAP_CONNECTION_ERROR);
-
-    string dn = getObjectDN(object);
 
     LDAPMod *attrs[2];
     LDAPMod attr;
@@ -505,16 +554,14 @@ void client::mod_delete(string object, string attribute, string value) {
     }
 }
 
-void client::mod_move(string object, string new_container) {
+void client::mod_move(string dn, string new_container) {
     if (ds == NULL) throw SearchException("Failed to use LDAP connection handler", LDAP_CONNECTION_ERROR);
 
     if (!ifDNExists(new_container)) {
-        string error_msg = "Error in mod_move, destination OU does not exists: ";
+        string error_msg = "Error in mod_move, destination DN does not exists: ";
         error_msg.append(new_container);
         throw OperationalException(error_msg, PARAMS_ERROR);
     }
-
-    string dn = getObjectDN(object);
 
     std::pair<string, string> rdn = explode_dn(dn)[0];
     string newrdn = rdn.first + "=" + rdn.second;
@@ -527,10 +574,8 @@ void client::mod_move(string object, string new_container) {
     }
 }
 
-void client::mod_rename(string object, string cn) {
+void client::mod_rename(string dn, string cn) {
     if (ds == NULL) throw SearchException("Failed to use LDAP connection handler", LDAP_CONNECTION_ERROR);
-
-    string dn = getObjectDN(object);
 
     string newrdn = "CN=" + cn;
 
@@ -542,15 +587,13 @@ void client::mod_rename(string object, string cn) {
     }
 }
 
-void client::mod_replace(string object, string attribute, vector <string> list) {
+void client::mod_replace(string dn, string attribute, vector <string> list) {
 /*
   It performs generic LDAP_MOD_REPLACE operation on object (short_name/DN).
   It removes list from attribute.
   It returns nothing if operation was successfull, throw OperationalException - otherwise.
 */
     if (ds == NULL) throw SearchException("Failed to use LDAP connection handler", LDAP_CONNECTION_ERROR);
-
-    string dn = getObjectDN(object);
 
     LDAPMod *attrs[2];
     LDAPMod attr;
@@ -660,7 +703,7 @@ vector < std::pair<string, string> > client::explode_dn(string dn) {
     int result = ldap_str2dn(dn.c_str(), &exp_dn, LDAP_DN_FORMAT_LDAPV3);
 
     if (result != LDAP_SUCCESS || exp_dn == NULL) {
-        throw OperationalException("Wrong OU syntax", OU_SYNTAX_ERROR);
+        throw OperationalException("Wrong DN syntax", OU_SYNTAX_ERROR);
     }
 
     for (i = 0; exp_dn[i] != NULL; ++i) {
@@ -705,8 +748,7 @@ vector < std::pair<string, string> > client::explode_dn(string dn) {
 #endif
 
 
-void client::RenameDN(string object, string cn) {
-    string dn = getObjectDN(object);
+void client::RenameDN(string dn, string cn) {
     mod_rename(dn, cn);
 }
 
@@ -739,12 +781,10 @@ map <string, vector <string> > client::getObjectAttributes(string object) {
     return getObjectAttributes(object, attributes);
 }
 
-map <string, vector <string> > client::getObjectAttributes(string object, const vector<string> &attributes) {
+map <string, vector <string> > client::getObjectAttributes(string dn, const vector<string> &attributes) {
 /*
   It returns map of given object attributes.
 */
-    string dn = getObjectDN(object);
-
     map < string, map < string, vector<string> > > search_result;
 
     search_result = search(dn, LDAP_SCOPE_BASE, "(objectclass=*)", attributes);
@@ -772,9 +812,7 @@ map <string, vector <string> > client::getObjectAttributes(string object, const 
     return attrs;
 }
 
-
-void client::MoveObject(string object, string new_container) {
-    string dn = getObjectDN(object);
+void client::MoveObject(string dn, string new_container) {
     mod_move(dn, new_container);
 }
 

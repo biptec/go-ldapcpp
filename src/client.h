@@ -61,10 +61,10 @@
 
 #ifdef LDAP_SCOPE_SUBORDINATE
     #define SCOPE_SUBORDINATE LDAP_SCOPE_SUBORDINATE /* OpenLDAP extension */
-    #define SCOPE_DEFAULT     LDAP_SCOPE_DEFAULT     /* OpenLDAP extension */
+#define SCOPE_DEFAULT     LDAP_SCOPE_DEFAULT     /* OpenLDAP extension */
 #else
-    #define SCOPE_SUBORDINATE ((ber_int_t) 0x0003)
-    #define SCOPE_DEFAULT     ((ber_int_t) -1)
+#define SCOPE_SUBORDINATE ((ber_int_t) 0x0003)
+#define SCOPE_DEFAULT     ((ber_int_t) -1)
 #endif
 
 using std::vector;
@@ -83,127 +83,129 @@ struct krb_struct {
 
 class Exception {
 public:
-      Exception(string _msg, int _code) { msg = _msg; code = _code; }
-      int code;
-      string msg;
+    Exception(string _msg, int _code) { msg = _msg; code = _code; }
+    int code;
+    string msg;
 };
 
 class BindException: public Exception {
 public:
-      BindException(string _msg, int _code): Exception(_msg, _code) {}
+    BindException(string _msg, int _code): Exception(_msg, _code) {}
 };
 
 class SearchException: public Exception {
 public:
-      SearchException(string _msg, int _code): Exception(_msg, _code) {}
+    SearchException(string _msg, int _code): Exception(_msg, _code) {}
 };
 
 class OperationalException: public Exception {
 public:
-      OperationalException(string _msg, int _code): Exception(_msg, _code) {}
+    OperationalException(string _msg, int _code): Exception(_msg, _code) {}
 };
 
-struct connParams {
-    public:
-        string domain;
-        string site;
-        vector<string> uries;
-        string binddn;
-        string bindpw;
-        string search_base;
-        bool secured;
-        bool use_gssapi;
-        bool use_tls;
-        bool use_ldaps;
+struct clientConnParams {
+public:
+    string domain;
+    string site;
+    vector<string> uries;
+    string binddn;
+    string bindpw;
+    string search_base;
+    bool secured;
+    bool use_gssapi;
+    bool use_tls;
+    bool use_ldaps;
 
-        // LDAP_OPT_NETWORK_TIMEOUT, LDAP_OPT_TIMEOUT
-        int nettimeout;
-        // LDAP_OPT_TIMELIMIT
-        int timelimit;
+    // LDAP_OPT_NETWORK_TIMEOUT, LDAP_OPT_TIMEOUT
+    int nettimeout;
+    // LDAP_OPT_TIMELIMIT
+    int timelimit;
 
-        connParams() :
-            secured(true),
-            use_gssapi(false),
-            use_tls(false),
-            use_ldaps(false),
-            // by default do not touch timeouts
-            nettimeout(-1), timelimit(-1)
+    clientConnParams() :
+        secured(true),
+        use_gssapi(false),
+        use_tls(false),
+        use_ldaps(false),
+        // by default do not touch timeouts
+        nettimeout(-1), timelimit(-1)
         {};
 
-        friend class client;
+    friend class client;
 
-    private:
-        string uri;
-        string login_method;
-        string bind_method;
+private:
+    string uri;
+    string login_method;
+    string bind_method;
 };
 
 
 class client {
 public:
-      client();
-      ~client();
+    client();
+    ~client();
 
-      static std::vector<string> get_ldap_servers(string domain, string site = "");
-      static string domain2dn(string domain);
+    static std::vector<string> get_ldap_servers(string domain, string site = "");
+    static string domain2dn(string domain);
 
-      void login(connParams _params);
-      void login(string uri, string binddn, string bindpw, string search_base, bool secured = true);
-      void login(std::vector <string> uries, string binddn, string bindpw, string search_base, bool secured = true);
+    void bind(clientConnParams _params);
+    void bind(string uri, string binddn, string bindpw, string search_base, bool secured = true);
+    void bind(std::vector <string> uries, string binddn, string bindpw, string search_base, bool secured = true);
 
-      string binded_uri() { return params.uri; }
-      string search_base() { return params.search_base; }
-      string bind_method() { return params.bind_method; }
-      string login_method() { return params.login_method; }
+    string binded_uri() { return params.uri; }
+    string search_base() { return params.search_base; }
+    string bind_method() { return params.bind_method; }
+    string login_method() { return params.login_method; }
 
-      void DeleteDN(string dn);
-      void RenameDN(string object, string cn);
-      void MoveObject(string object, string new_container);
+    void modify(string dn, int mod_op, string attribute, vector <string> list);
+    void modifyDN(string dn, string newrdn, string newparent, int deleteoldrdn);
 
-      void setObjectAttribute(string object, string attr, string value);
-      void setObjectAttribute(string object, string attr, vector <string> values);
-      void clearObjectAttribute(string object, string attr);
+    void DeleteDN(string dn);
+    void RenameDN(string object, string cn);
+    void MoveObject(string object, string new_container);
 
+    void setObjectAttribute(string object, string attr, string value);
+    void setObjectAttribute(string object, string attr, vector <string> values);
+    void clearObjectAttribute(string object, string attr);
 
-      string          getObjectDN(string object);
+    bool            ifDNExists(string object, string objectclass);
+    bool            ifDNExists(string object);
 
-      bool            ifDNExists(string object, string objectclass);
-      bool            ifDNExists(string object);
+    std::vector <string> getObjectAttribute(string object, string attribute);
 
-      std::vector <string> getObjectAttribute(string object, string attribute);
+    std::vector <string> searchDN(string search_base, string filter, int scope);
+    std::vector <string> search(string search_base, string filter, int scope, const std::vector <string> &attributes);
 
-      std::vector <string> searchDN(string search_base, string filter, int scope);
-      std::map < string, std::map < string, std::vector<string> > > search(string OU, int scope, string filter, const std::vector <string> &attributes);
-
-      std::map <string, std::vector <string> > getObjectAttributes(string object);
-      std::map <string, std::vector <string> > getObjectAttributes(string object, const std::vector<string> &attributes);
+    std::map <string, std::vector <string> > getObjectAttributes(string object);
+    std::map <string, std::vector <string> > getObjectAttributes(string object, const std::vector<string> &attributes);
 
 private:
-      connParams params;
+    clientConnParams params;
 
-      LDAP *ds;
+    LDAP *ds;
 
-      int isBinary(char * attrname);
+    int isBinary(char * attrname);
 
-      void login(LDAP **ds, connParams& _params);
-      void logout(LDAP *ds);
+    void bind(LDAP **ds, clientConnParams& _params);
+    void close(LDAP *ds);
 
-      void mod_add(string object, string attribute, string value);
-      void mod_delete(string object, string attribute, string value);
-      void mod_rename(string object, string cn);
-      void mod_replace(string object, string attribute, string value);
-      void mod_replace(string object, string attribute, vector <string> list);
-      void mod_move(string object, string new_container);
-      std::map < string, std::vector<string> > _getvalues(LDAPMessage *entry);
-      string dn2domain(string dn);
-      vector < std::pair<string, string> > explode_dn(string dn);
-      string merge_dn(vector < std::pair<string, string> > dn_exploded);
-      std::vector <string> DNsToShortNames(std::vector <string> &v);
+    std::map < string, std::map < string, std::vector<string> > > search(string search_base, int scope, string filter, const std::vector <string> &attributes);
 
-      std::string ldap_prefix;
+    void mod_add(string object, string attribute, string value);
+    void mod_delete(string object, string attribute, string value);
+    void mod_rename(string object, string cn);
+    void mod_replace(string object, string attribute, string value);
+    void mod_replace(string object, string attribute, vector <string> list);
+    void mod_move(string object, string new_container);
+    std::map < string, std::vector<string> > _getvalues(LDAPMessage *entry);
+    string dn2domain(string dn);
+    vector < std::pair<string, string> > explode_dn(string dn);
+    string merge_dn(vector < std::pair<string, string> > dn_exploded);
+    std::vector <string> DNsToShortNames(std::vector <string> &v);
 
-      static std::vector<string> perform_srv_query(string srv_rec);
-      static struct berval password2berval(string password);
+    std::string ldap_prefix;
+
+    static std::vector<string> perform_srv_query(string srv_rec);
+    static struct berval password2berval(string password);
 };
 
 inline string upper(string input) {
@@ -241,11 +243,11 @@ inline time_t FileTimeToPOSIX(long long ft) {
 }
 
 inline void replace(std::string& subject, const std::string& search,
-                                   const std::string& replace) {
+                    const std::string& replace) {
     size_t pos = 0;
     while((pos = subject.find(search, pos)) != std::string::npos) {
-         subject.replace(pos, search.length(), replace);
-         pos += replace.length();
+        subject.replace(pos, search.length(), replace);
+        pos += replace.length();
     }
 }
 
@@ -256,19 +258,19 @@ inline string itos(int num) {
 }
 
 inline long long _stoll(string s) {
-   errno = 0;
-   char *endptr;
-   int base = 10;
-   long long val = strtoll(s.c_str(), &endptr, base);
-   if ((errno == ERANGE && (val == LLONG_MAX || val == LLONG_MIN))
-      || (errno != 0 && val == 0)) {
-      throw std::invalid_argument("unacceptable input: " + s);
-   }
-   string end = string(endptr);
-   if (end.size() != 0) {
-      throw std::invalid_argument("invalid input: " + end);
-   }
-   return val;
+    errno = 0;
+    char *endptr;
+    int base = 10;
+    long long val = strtoll(s.c_str(), &endptr, base);
+    if ((errno == ERANGE && (val == LLONG_MAX || val == LLONG_MIN))
+        || (errno != 0 && val == 0)) {
+        throw std::invalid_argument("unacceptable input: " + s);
+    }
+    string end = string(endptr);
+    if (end.size() != 0) {
+        throw std::invalid_argument("invalid input: " + end);
+    }
+    return val;
 }
 
 inline string DecToBin(long long number) {
