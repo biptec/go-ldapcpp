@@ -38,7 +38,7 @@ krb5_cleanup(krb_struct &krb_param)
  * create Kerberos memory cache
  */
 int
-krb5_create_cache(const char *domain, krb_struct *krb_param)
+krb5_create_cache(const char *domain, krb_struct *krb_param, string ccache_name, string keytab_name)
 {
     krb_param->context = NULL;
     krb_param->cc = NULL;
@@ -50,7 +50,7 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
     krb5_principal *principal_list = NULL;
     krb5_principal principal = NULL;
     char *service;
-    char *keytab_name = NULL, *principal_name = NULL, *mem_cache = NULL;
+    char *principal_name = NULL;
     char buf[KT_PATH_MAX], *p;
     size_t j,nprinc = 0;
     int retval = 0;
@@ -79,21 +79,23 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
      * getting default keytab name
      */
 
+    if (keytab_name.empty()) {
+        log_msg.str("");
+        log_msg << "Got default keytab file name";
+        log->debug(log_msg.str());
+
+        krb5_kt_default_name(krb_param->context, buf, KT_PATH_MAX);
+        p = strchr(buf, ':'); /* Find the end if "FILE:" */
+        if (p)
+            ++p;            /* step past : */
+        keytab_name = strdup(p ? p : buf);
+    }
+
     log_msg.str("");
-    log_msg << "Got default keytab file name";
+    log_msg << "Keytab file name " << keytab_name;
     log->debug(log_msg.str());
 
-    krb5_kt_default_name(krb_param->context, buf, KT_PATH_MAX);
-    p = strchr(buf, ':'); /* Find the end if "FILE:" */
-    if (p)
-        ++p;            /* step past : */
-    keytab_name = strdup(p ? p : buf);
-
-    log_msg.str("");
-    log_msg << "Got default keytab file name " << keytab_name;
-    log->debug(log_msg.str());
-
-    code = krb5_kt_resolve(krb_param->context, keytab_name, &keytab);
+    code = krb5_kt_resolve(krb_param->context, keytab_name.c_str(), &keytab);
     if (code) {
         const char *s = krb5_get_error_message(krb_param->context, code);
         log_msg.str("");
@@ -185,29 +187,28 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
         retval = 1;
         goto cleanup;
     }
-    /*
-     * prepare memory credential cache
-     */
-#if  !defined(HAVE_KRB5_MEMORY_CACHE) || defined(HAVE_SUN_LDAP_SDK)
-    mem_cache = (char *) malloc(strlen("FILE:/tmp/libadclient_") + 16);
-    snprintf(mem_cache, strlen("FILE:/tmp/libadclient_") + 16, "FILE:/tmp/libadclient_%d", (int) getpid());
-#else
-    mem_cache = (char *) malloc(strlen("MEMORY:libadclient_") + 16);
-    snprintf(mem_cache, strlen("MEMORY:libadclient_") + 16, "MEMORY:libadclient_%d", (int) getpid());
-#endif
 
-    if (!mem_cache) {
+    if (ccache_name.empty()) {
         retval = 1;
         goto cleanup;
     }
 
-    setenv("KRB5CCNAME", mem_cache, 1);
+    /*
+     * prepare memory credential cache
+     */
+#if  !defined(HAVE_KRB5_MEMORY_CACHE) || defined(HAVE_SUN_LDAP_SDK)
+    ccache_name = "FILE:" + ccache_name;
+#else
+    ccache_name = "MEMORY:" + ccache_name;
+#endif
+
+     setenv("KRB5CCNAME", ccache_name.c_str(), 1);
 
     log_msg.str("");
-    log_msg << "Set credential cache to " << mem_cache;
+    log_msg << "Set credential cache to " << ccache_name;
     log->debug(log_msg.str());
 
-    code = krb5_cc_resolve(krb_param->context, mem_cache, &krb_param->cc);
+    code = krb5_cc_resolve(krb_param->context, ccache_name.c_str(), &krb_param->cc);
     if (code) {
         const char *s = krb5_get_error_message(krb_param->context, code);
         log_msg.str("");
@@ -397,9 +398,7 @@ loop_end:
 cleanup:
     if (keytab)
         krb5_kt_close(krb_param->context, keytab);
-    free(keytab_name);
     free(principal_name);
-    free(mem_cache);
     if (principal)
         krb5_free_principal(krb_param->context, principal);
     for (j = 0; j < nprinc; ++j) {

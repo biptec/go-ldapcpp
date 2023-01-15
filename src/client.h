@@ -33,6 +33,7 @@
 #include <cerrno>
 #include <cstdlib>
 #include <resolv.h>
+#include <unistd.h>
 
 // for OS X
 #ifndef NS_MAXMSG
@@ -121,14 +122,30 @@ public:
     // LDAP_OPT_TIMELIMIT
     int timelimit;
 
+    string krb5_keytab_name;
+    string krb5_ccache_name;
+
     clientConnParams() :
         secured(true),
         use_gssapi(false),
         use_tls(false),
         use_ldaps(false),
         // by default do not touch timeouts
-        nettimeout(-1), timelimit(-1)
-        {};
+        nettimeout(-1),
+        timelimit(-1) {
+
+        char *ccache_name = NULL;
+
+        const char ccache_fmt[] = "/tmp/ldapcpp_%d";
+        int ccache_len = strlen(ccache_fmt) + 16;
+
+        ccache_name = (char *) malloc(ccache_len);
+        snprintf(ccache_name, ccache_len, ccache_fmt, (int) getpid());
+
+        krb5_ccache_name = ccache_name;
+
+        free(ccache_name);
+    };
 
     friend class client;
 
@@ -393,7 +410,7 @@ inline string decodeSID(string sid) {
 int sasl_bind_digest_md5(LDAP *ds, string binddn, string bindpw);
 int sasl_bind_simple(LDAP *ds, string binddn, string bindpw);
 #ifdef KRB5
-int krb5_create_cache(const char *domain, krb_struct *krb_param);
+int krb5_create_cache(const char *domain, krb_struct *krb_param, string ccache_name, string keytab_name);
 void krb5_cleanup(krb_struct &krb_param);
 int sasl_bind_gssapi(LDAP *ds);
 int sasl_rebind_gssapi(LDAP * ld, LDAP_CONST char *url, ber_tag_t request, ber_int_t msgid, void *params);

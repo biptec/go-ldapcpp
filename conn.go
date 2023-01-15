@@ -48,7 +48,7 @@ func (conn *Conn) StartTLS(config *tls.Config) error {
 }
 
 // GSSAPIBind performs the GSSAPI SASL bind using the provided GSSAPI client.
-func (conn *Conn) GSSAPIBind(realm, keytab string) (err error) {
+func (conn *Conn) GSSAPIBind(realm, keytab_name string) (err error) {
 	defer Recover(&err)
 
 	params := NewClientConnParams()
@@ -61,6 +61,7 @@ func (conn *Conn) GSSAPIBind(realm, keytab string) (err error) {
 	params.SetUse_gssapi(true)
 	params.SetUse_tls(false)
 	params.SetUse_ldaps(false)
+	params.SetKrb5_keytab_name(keytab_name)
 
 	uries := NewStringVector()
 	defer DeleteStringVector(uries)

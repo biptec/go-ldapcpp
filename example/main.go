@@ -32,7 +32,7 @@ func main() {
 	}
 	defer client.Close()
 
-	if err := client.GSSAPIBind("central.biptec.test", ""); err != nil {
+	if err := client.GSSAPIBind("central.biptec.test", "/private/work/biptec/lab/krb5.keytab"); err != nil {
 		fmt.Println(err)
 		return
 	}

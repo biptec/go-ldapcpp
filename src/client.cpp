@@ -184,7 +184,7 @@ void client::bind(LDAP **ds, clientConnParams& _params) {
 #ifdef KRB5
         if (_params.use_gssapi) {
             krb_struct krb_param;
-            if (krb5_create_cache(_params.domain.c_str(), &krb_param) == 0) {
+            if (krb5_create_cache(_params.domain.c_str(), &krb_param, _params.krb5_ccache_name, _params.krb5_keytab_name) == 0) {
                 _params.login_method = "GSSAPI";
 
                 bindresult = sasl_bind_gssapi(*ds);
