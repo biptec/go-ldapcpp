@@ -13,39 +13,14 @@
 #include <iostream>
 #include <fstream>
 #include "client.h"
+#include <sstream>
 
 using std::cout;
 using std::endl;
 
+
 #define KT_PATH_MAX 256
 #define safe_free(x)    while ((x)) { free((x)); (x) = NULL; }
-
-void check_for_file_existence() {
-    char* my_krb5ccname;
-    my_krb5ccname = std::getenv("KRB5CCNAME");
-    if (my_krb5ccname!=NULL) {
-        printf ("--------- KRB5CCNAME is: %s\n",my_krb5ccname);
-    } else {
-        printf ("--------- KRB5CCNAME is emtpy\n");
-        return;
-    }
-
-    string krb5ccname_str = my_krb5ccname;
-    size_t krb5ccname_length = krb5ccname_str.size();
-
-    std::string delimiter = ":";
-    size_t l = krb5ccname_str.find(delimiter) + 1;
-    std::string filename = krb5ccname_str.substr(l, krb5ccname_length-l);
-
-    std::ifstream ifile;
-    ifile.open(filename);
-    if(ifile) {
-        cout << "--------- " << filename << " file exists" << endl;
-    } else {
-        cout << "--------- "  << filename << " file DOESN'T exist" << endl;
-    }
-}
-
 
 void
 krb5_cleanup(krb_struct &krb_param)
@@ -57,6 +32,8 @@ krb5_cleanup(krb_struct &krb_param)
         krb5_free_context(krb_param.context);
     }
 }
+
+
 /*
  * create Kerberos memory cache
  */
@@ -79,6 +56,8 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
     int retval = 0;
     krb5_error_code code = 0;
 
+    std::stringstream log_msg;
+
     if (!domain || !strcmp(domain, ""))
         return (1);
 
@@ -89,7 +68,10 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
     code = krb5_init_context(&krb_param->context);
     if (code) {
         const char *s = krb5_get_error_message(krb_param->context, code);
-        cout << "%s| %s: ERROR: Error while initialising Kerberos library: " << s << endl;
+        log_msg.str("");
+        log_msg << "%s| %s: Error while initialising Kerberos library: " << s;
+        log->error(log_msg.str());
+
         retval = 1;
         goto cleanup;
     }
@@ -97,29 +79,44 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
      * getting default keytab name
      */
 
-    cout << "DEBUG: Get default keytab file name" << endl;
+    log_msg.str("");
+    log_msg << "Got default keytab file name";
+    log->debug(log_msg.str());
+
     krb5_kt_default_name(krb_param->context, buf, KT_PATH_MAX);
     p = strchr(buf, ':'); /* Find the end if "FILE:" */
     if (p)
         ++p;            /* step past : */
     keytab_name = strdup(p ? p : buf);
-    cout << "DEBUG: Got default keytab file name " << keytab_name << endl;
+
+    log_msg.str("");
+    log_msg << "Got default keytab file name " << keytab_name;
+    log->debug(log_msg.str());
 
     code = krb5_kt_resolve(krb_param->context, keytab_name, &keytab);
     if (code) {
         const char *s = krb5_get_error_message(krb_param->context, code);
-        cout << "ERROR: Error while resolving keytab " << keytab_name << ": " << s << endl;
+        log_msg.str("");
+        log_msg << "Error while resolving keytab " << keytab_name << ": " << s;
+        log->error(log_msg.str());
+
         retval = 1;
         goto cleanup;
     }
     code = krb5_kt_start_seq_get(krb_param->context, keytab, &cursor);
     if (code) {
         const char *s = krb5_get_error_message(krb_param->context, code);
-        cout << "ERROR: Error while starting keytab scan: " << s << endl;
+        log_msg.str("");
+        log_msg << "Error while starting keytab scan: " << s;
+        log->error(log_msg.str());
+
         retval = 1;
         goto cleanup;
     }
-    cout << "DEBUG: Get principal name from keytab" << keytab_name << endl;
+
+    log_msg.str("");
+    log_msg << "Get principal name from keytab" << keytab_name;
+    log->debug(log_msg.str());
 
     nprinc = 0;
     while ((code = krb5_kt_next_entry(krb_param->context, keytab, &entry, &cursor)) == 0) {
@@ -134,22 +131,34 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
             principal_list = new_principal_list;
         }
         krb5_copy_principal(krb_param->context, entry.principal, &principal_list[nprinc++]);
-        cout << "DEBUG: Keytab entry has realm name: " << krb5_princ_realm(krb_param->context, entry.principal)->data << endl;
+
+        log_msg.str("");
+        log_msg << "Keytab entry has realm name: " << krb5_princ_realm(krb_param->context, entry.principal)->data;
+        log->debug(log_msg.str());
+
         if (!strcasecmp(domain, krb5_princ_realm(krb_param->context, entry.principal)->data))
         {
             code = krb5_unparse_name(krb_param->context, entry.principal, &principal_name);
             if (code) {
                 const char *s = krb5_get_error_message(krb_param->context, code);
-                cout << "ERROR: Error while unparsing principal name:" << s << endl;
+                log_msg.str("");
+                log_msg << "Error while unparsing principal name:" << s;
+                log->error(log_msg.str());
             } else {
-                cout << "DEBUG: Found principal name:" << principal_name << endl;
+                log_msg.str("");
+                log_msg << "Found principal name:" << principal_name;
+                log->debug(log_msg.str());
+
                 found = 1;
             }
         }
         code = krb5_free_keytab_entry_contents(krb_param->context, &entry);
         if (code) {
             const char *s = krb5_get_error_message(krb_param->context, code);
-            cout << "ERROR: Error while freeing keytab entry: " << s << endl;
+            log_msg.str("");
+            log_msg << "Error while freeing keytab entry: " << s;
+            log->error(log_msg.str());
+
             retval = 1;
             break;
         }
@@ -159,14 +168,20 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
 
     if (code && code != KRB5_KT_END) {
         const char *s = krb5_get_error_message(krb_param->context, code);
-        cout << "ERROR: Error while scanning keytab: " << s << endl;
+        log_msg.str("");
+        log_msg << "Error while scanning keytab: " << s;
+        log->error(log_msg.str());
+
         retval = 1;
         goto cleanup;
     }
     code = krb5_kt_end_seq_get(krb_param->context, keytab, &cursor);
     if (code) {
         const char *s = krb5_get_error_message(krb_param->context, code);
-        cout << "ERROR: Error while ending keytab scan: " << s << endl;
+        log_msg.str("");
+        log_msg << "Error while ending keytab scan: " << s;
+        log->error(log_msg.str());
+
         retval = 1;
         goto cleanup;
     }
@@ -187,11 +202,18 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
     }
 
     setenv("KRB5CCNAME", mem_cache, 1);
-    cout << "DEBUG: Set credential cache to " << mem_cache << endl;
+
+    log_msg.str("");
+    log_msg << "Set credential cache to " << mem_cache;
+    log->debug(log_msg.str());
+
     code = krb5_cc_resolve(krb_param->context, mem_cache, &krb_param->cc);
     if (code) {
         const char *s = krb5_get_error_message(krb_param->context, code);
-        cout << "ERROR: Error while resolving memory ccache: " << s << endl;
+        log_msg.str("");
+        log_msg << "Error while resolving memory ccache: " << s;
+        log->error(log_msg.str());
+
         retval = 1;
         goto cleanup;
     }
@@ -200,8 +222,13 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
      */
     if (!principal_name) {
         size_t i;
-        cout << "DEBUG: Did not find a principal in keytab for domain " << domain << endl;
-        cout << "DEBUG: Try to get principal of trusted domain" << endl;
+        log_msg.str("");
+        log_msg << "Did not find a principal in keytab for domain " << domain;
+        log->debug(log_msg.str());
+
+        log_msg.str("");
+        log_msg << "Try to get principal of trusted domain";
+        log->debug(log_msg.str());
 
         for (i = 0; i < nprinc; ++i) {
             krb5_creds *tgt_creds = NULL;
@@ -217,7 +244,10 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
             code = krb5_unparse_name(krb_param->context, principal_list[i], &principal_name);
             if (code) {
                 const char *s = krb5_get_error_message(krb_param->context, code);
-                cout << "DEBUG: Error while unparsing principal name: " << s << endl;
+                log_msg.str("");
+                log_msg << "Error while unparsing principal name: " << s;
+                log->error(log_msg.str());
+
                 goto loop_end;
             }
             cout << "DEBUG: Keytab entry has principal: " << principal_name << endl;
@@ -225,19 +255,28 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
             code = krb5_get_init_creds_keytab(krb_param->context, creds, principal_list[i], keytab, 0, NULL, NULL);
             if (code) {
                 const char *s = krb5_get_error_message(krb_param->context, code);
-                cout << "DEBUG: Error while initialising credentials from keytab: " << s << endl;
+                log_msg.str("");
+                log_msg << "Error while initialising credentials from keytab: " << s;
+                log->error(log_msg.str());
+
                 goto loop_end;
             }
             code = krb5_cc_initialize(krb_param->context, krb_param->cc, principal_list[i]);
             if (code) {
                 const char *s = krb5_get_error_message(krb_param->context, code);
-                cout << "ERROR: Error while initializing memory caches: " << s << endl;
+                log_msg.str("");
+                log_msg << "Error while initializing memory caches: " << s;
+                log->error(log_msg.str());
+
                 goto loop_end;
             }
             code = krb5_cc_store_cred(krb_param->context, krb_param->cc, creds);
             if (code) {
                 const char *s = krb5_get_error_message(krb_param->context, code);
-                cout << "DEBUG: Error while storing credentials: " << s << endl;
+                log_msg.str("");
+                log_msg << "Error while storing credentials: " << s;
+                log->error(log_msg.str());
+
                 goto loop_end;
             }
             if (creds->server)
@@ -248,16 +287,25 @@ krb5_create_cache(const char *domain, krb_struct *krb_param)
             free(service);
             if (code) {
                 const char *s = krb5_get_error_message(krb_param->context, code);
-                cout << "ERROR: Error while initialising TGT credentials: " << s << endl;
+                log_msg.str("");
+                log_msg << "Error while initialising TGT credentials: " << s;
+                log->error(log_msg.str());
+
                 goto loop_end;
             }
             code = krb5_get_credentials(krb_param->context, 0, krb_param->cc, creds, &tgt_creds);
             if (code) {
                 const char *s = krb5_get_error_message(krb_param->context, code);
-                cout << "DEBUG: Error while getting tgt: " << s << endl;
+                log_msg.str("");
+                log_msg << "Error while getting tgt: " << s;
+                log->error(log_msg.str());
+
                 goto loop_end;
             } else {
-                cout << "DEBUG: Found trusted principal name: " << principal_name << endl;
+                log_msg.str("");
+                log_msg << "Found trusted principal name: " << principal_name;
+                log->debug(log_msg.str());
+
                 break;
             }
 
@@ -277,14 +325,20 @@ loop_end:
         creds = NULL;
     }
     if (principal_name) {
-        cout << "DEBUG: Got principal name " << principal_name << endl;
+        log_msg.str("");
+        log_msg << "Got principal name " << principal_name;
+        log->debug(log_msg.str());
+
         /*
          * build principal
          */
         code = krb5_parse_name(krb_param->context, principal_name, &principal);
         if (code) {
             const char *s = krb5_get_error_message(krb_param->context, code);
-            cout << "ERROR: Error while parsing name " << principal_name << ": " << s << endl;
+            log_msg.str("");
+            log_msg << "Error while parsing name " << principal_name << ": " << s;
+            log->error(log_msg.str());
+
             retval = 1;
             goto cleanup;
         }
@@ -301,29 +355,42 @@ loop_end:
         code = krb5_get_init_creds_keytab(krb_param->context, creds, principal, keytab, 0, NULL, NULL);
         if (code) {
             const char *s = krb5_get_error_message(krb_param->context, code);
-            cout << "ERROR: Error while initialising credentials from keytab: " << s << endl;
+            log_msg.str("");
+            log_msg << "Error while initialising credentials from keytab: " << s;
+            log->error(log_msg.str());
+
             retval = 1;
             goto cleanup;
         }
         code = krb5_cc_initialize(krb_param->context, krb_param->cc, principal);
         if (code) {
             const char *s = krb5_get_error_message(krb_param->context, code);
-            cout << "ERROR: Error while initializing memory caches: " << s << endl;
+            log_msg.str("");
+            log_msg << "Error while initializing memory caches: " << s;
+            log->error(log_msg.str());
+
             retval = 1;
             goto cleanup;
         }
         code = krb5_cc_store_cred(krb_param->context, krb_param->cc, creds);
         if (code != 0) {
             const char *s = krb5_get_error_message(krb_param->context, code);
-            cout << "ERROR: Error while storing credentials: " << s << endl;
+            log_msg.str("");
+            log_msg << "Error while storing credentials: " << s;
+            log->error(log_msg.str());
+
             retval = 1;
             goto cleanup;
         }
-        cout << "DEBUG: Stored credentials" << endl;
-
+        log_msg.str("");
+        log_msg << "Stored credentials";
+        log->debug(log_msg.str());
 
     } else {
-        cout << "DEBUG: Got no principal name" << endl;
+        log_msg.str("");
+        log_msg << "Got no principal name";
+        log->debug(log_msg.str());
+
         retval = 1;
     }
 

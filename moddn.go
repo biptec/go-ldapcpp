@@ -46,7 +46,10 @@ func NewModifyDNWithControlsRequest(dn string, rdn string, delOld bool, newSup s
 
 // ModifyDN renames the given DN and optionally move to another base (when the "newSup" argument
 // to NewModifyDNRequest() is not "").
-func (l *Conn) ModifyDN(req *ModifyDNRequest) (err error) {
+func (conn *Conn) ModifyDN(req *ModifyDNRequest) (err error) {
+	conn.Lock()
+	defer conn.Unlock()
+
 	defer Recover(&err)
 
 	var deleteOldRDN int
@@ -54,7 +57,7 @@ func (l *Conn) ModifyDN(req *ModifyDNRequest) (err error) {
 		deleteOldRDN = 1
 	}
 
-	l.client.ModifyDN(req.DN, req.NewRDN, req.NewSuperior, deleteOldRDN)
+	conn.client.ModifyDN(req.DN, req.NewRDN, req.NewSuperior, deleteOldRDN)
 
 	return nil
 }

@@ -11,9 +11,9 @@ const (
 )
 
 // Modify performs the ModifyRequest
-func (l *Conn) Modify(req *ModifyRequest) error {
+func (conn *Conn) Modify(req *ModifyRequest) error {
 	for _, change := range req.Changes {
-		if err := l.modifyChange(req.DN, change.Operation, change.Modification.Type, change.Modification.Vals); err != nil {
+		if err := conn.modifyChange(req.DN, change.Operation, change.Modification.Type, change.Modification.Vals); err != nil {
 			return err
 		}
 	}
@@ -21,7 +21,10 @@ func (l *Conn) Modify(req *ModifyRequest) error {
 	return nil
 }
 
-func (l *Conn) modifyChange(dn string, mod_op uint, attr string, vals []string) (err error) {
+func (conn *Conn) modifyChange(dn string, mod_op uint, attr string, vals []string) (err error) {
+	conn.Lock()
+	defer conn.Unlock()
+
 	defer Recover(&err)
 
 	cVals := NewStringVector()
@@ -31,7 +34,7 @@ func (l *Conn) modifyChange(dn string, mod_op uint, attr string, vals []string) 
 		cVals.Add(val)
 	}
 
-	l.client.Modify(dn, int(mod_op), attr, cVals)
+	conn.client.Modify(dn, int(mod_op), attr, cVals)
 
 	return nil
 }

@@ -138,6 +138,14 @@ private:
     string bind_method;
 };
 
+class clientLogger {
+public:
+    virtual ~clientLogger() { }
+    virtual void debug(string) { }
+    virtual void error(string) { }
+};
+
+extern clientLogger *log;
 
 class client {
 public:
@@ -178,12 +186,12 @@ public:
     std::map <string, std::vector <string> > getObjectAttributes(string object);
     std::map <string, std::vector <string> > getObjectAttributes(string object, const std::vector<string> &attributes);
 
+    void delLogger() { delete log; log = 0; }
+    void setLogger(clientLogger *fn) { delLogger(); log = fn; }
 private:
     clientConnParams params;
 
     LDAP *ds;
-
-    int isBinary(char * attrname);
 
     void bind(LDAP **ds, clientConnParams& _params);
     void close(LDAP *ds);
@@ -381,8 +389,6 @@ inline string decodeSID(string sid) {
 
     return result.str();
 }
-
-void check_for_file_existence();
 
 int sasl_bind_digest_md5(LDAP *ds, string binddn, string bindpw);
 int sasl_bind_simple(LDAP *ds, string binddn, string bindpw);

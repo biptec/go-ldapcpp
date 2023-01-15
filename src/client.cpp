@@ -1,6 +1,8 @@
 #include "stdlib.h"
 #include "client.h"
 
+clientLogger *log = new clientLogger();
+
 /*
   Active Directory class.
 
@@ -23,6 +25,7 @@ client::~client() {
   Destructor, to automaticaly free initial values allocated at bind().
 */
     close(ds);
+    delLogger();
 }
 
 void client::close(LDAP *ds) {
@@ -892,31 +895,6 @@ map < string, vector<string> > client::_getvalues(LDAPMessage *entry) {
 }
 
 
-int client::isBinary(char * attrname) {
-    if (!strcmp(attrname, "jpegPhoto") ||
-        !strcmp(attrname, "photo") ||
-        !strcmp(attrname, "personalSignature") ||
-        !strcmp(attrname, "userCertificate") ||
-        !strcmp(attrname, "cACertificate") ||
-        !strcmp(attrname, "authorityRevocationList") ||
-        !strcmp(attrname, "certificateRevocationList") ||
-        !strcmp(attrname, "deltaRevocationList") ||
-        !strcmp(attrname, "crossCertificatePair") ||
-        !strcmp(attrname, "x500UniqueIdentifier") ||
-        !strcmp(attrname, "audio") ||
-        !strcmp(attrname, "javaSerializedObject") ||
-        !strcmp(attrname, "thumbnailPhoto") ||
-        !strcmp(attrname, "thumbnailLogo") ||
-        !strcmp(attrname, "supportedAlgorithms") ||
-        !strcmp(attrname, "protocolInformation") ||
-        !strcmp(attrname, "objectGUID") ||
-        !strcmp(attrname, "objectSid") ||
-        strstr(attrname, ";binary")) {
-        return 1;
-    }
-    return 0;
-}
-
 vector <string> client::DNsToShortNames(vector <string> &v) {
     vector <string> result;
 
@@ -966,6 +944,8 @@ vector<string> client::get_ldap_servers(string domain, string site) {
 
     return servers;
 }
+
+
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunknown-pragmas"

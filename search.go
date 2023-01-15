@@ -16,10 +16,13 @@ const (
 )
 
 // Search performs the given search request
-func (l *Conn) Search(req *SearchRequest) (res *SearchResult, err error) {
+func (conn *Conn) Search(req *SearchRequest) (res *SearchResult, err error) {
+	conn.Lock()
+	defer conn.Unlock()
+
 	defer Recover(&err)
 
-	vector := l.client.SearchDN(req.BaseDN, req.Filter, req.Scope)
+	vector := conn.client.SearchDN(req.BaseDN, req.Filter, req.Scope)
 	defer DeleteStringVector(vector)
 	dns := vector2slice(vector)
 
@@ -37,7 +40,7 @@ func (l *Conn) Search(req *SearchRequest) (res *SearchResult, err error) {
 	res = &SearchResult{}
 
 	for _, dn := range dns {
-		cmap := l.client.GetObjectAttributes(dn, cAttrs)
+		cmap := conn.client.GetObjectAttributes(dn, cAttrs)
 		defer DeleteString_VectorString_Map(cmap)
 
 		var attrs []*EntryAttribute

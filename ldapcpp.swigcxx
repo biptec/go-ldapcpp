@@ -1,4 +1,4 @@
-%module ldapcpp
+%module(directors="1") ldapcpp
 
 %{
 #include "client.h"
@@ -8,6 +8,8 @@
 %include "std_string.i"
 %include "std_vector.i"
 %include "std_map.i"
+
+%feature("director");
 
 namespace std {
     %template(StringVector) vector<string>;

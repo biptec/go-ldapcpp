@@ -210,3 +210,8 @@ func Recover(err *error) {
 
 	}
 }
+
+// NewError creates an LDAP error with the given code and underlying error
+func NewError(resultCode uint16, err error) error {
+	return &Error{ResultCode: resultCode, Msg: err.Error()}
+}

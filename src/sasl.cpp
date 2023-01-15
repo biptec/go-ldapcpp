@@ -107,20 +107,14 @@ int sasl_interact_gssapi(LDAP *ds, unsigned flags, void *indefaults, void *in) {
             case SASL_CB_GETREALM:
                 if (defaults)
                     dflt = defaults->realm;
-
-                cout << "DEBUG realm dflt: " << dflt << endl;
                 break;
             case SASL_CB_AUTHNAME:
                 if (defaults)
                     dflt = defaults->authcid;
-
-                cout << "DEBUG authname dflt: " << dflt << endl;
                 break;
             case SASL_CB_PASS:
                 if (defaults)
                     dflt = defaults->passwd;
-
-                cout << "DEBUG pass dflt: " << dflt << endl;
                 break;
             case SASL_CB_USER:
                 if (defaults)
@@ -131,10 +125,6 @@ int sasl_interact_gssapi(LDAP *ds, unsigned flags, void *indefaults, void *in) {
                 break;
             case SASL_CB_ECHOPROMPT:
                 break;
-        }
-
-        if (dflt != NULL ) {
-            cout << "DEBUG dflt: " << dflt << endl;
         }
 
         if (dflt && !*dflt) {
@@ -151,13 +141,18 @@ int sasl_interact_gssapi(LDAP *ds, unsigned flags, void *indefaults, void *in) {
 }
 
 int sasl_bind_gssapi(LDAP *ds) {
-    unsigned sasl_flags = LDAP_SASL_INTERACTIVE;
+    std::stringstream log_msg;
+
+    unsigned sasl_flags = LDAP_SASL_QUIET;
     string sasl_mech = "GSSAPI";
 
     string sasl_secprops = "maxssf=56";
     int rc = ldap_set_option(ds, LDAP_OPT_X_SASL_SECPROPS, (void *) sasl_secprops.c_str());
     if (rc != LDAP_SUCCESS) {
-        cout << "ERROR: Could not set LDAP_OPT_X_SASL_SECPROPS " << sasl_secprops << ":" << ldap_err2string(rc) << endl;
+        log_msg.str("");
+        log_msg << "Could not set LDAP_OPT_X_SASL_SECPROPS " << sasl_secprops << ":" << ldap_err2string(rc);
+        log->error(log_msg.str());
+
         return rc;
     }
 
@@ -169,14 +164,6 @@ int sasl_bind_gssapi(LDAP *ds) {
     ldap_get_option(ds, LDAP_OPT_X_SASL_AUTHZID, &defaults.authzid);
     defaults.passwd = NULL;
 
-    cout << "DEBUG authcid: " << defaults.mech << endl;
-
-    if (defaults.realm != NULL ) {
-        cout << "DEBUG realm: " << defaults.realm << endl;
-    }
-    if (defaults.authzid != NULL ) {
-        cout << "DEBUG authzid: " << defaults.authzid << endl;
-    }
 
     // std::chrono::seconds dura(15);
     // std::this_thread::sleep_for(dura);
@@ -190,8 +177,11 @@ int sasl_bind_gssapi(LDAP *ds) {
     ldap_memfree(defaults.authcid);
     ldap_memfree(defaults.authzid);
     if (rc != LDAP_SUCCESS) {
-        cout << "ERROR: ldap_sasl_interactive_bind_s error: " << ldap_err2string(rc) << endl;
+        log_msg.str("");
+        log_msg << "ldap_sasl_interactive_bind_s error: " << ldap_err2string(rc);
+        log->error(log_msg.str());
     }
+
     return rc;
 
 }
