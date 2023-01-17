@@ -12,9 +12,6 @@ import (
 
 // DefaultTimeout is a package-level variable that sets the timeout value
 // used for the Dial and DialTLS methods.
-//
-// WARNING: since this is a package-level variable, setting this value from
-// multiple places will probably result in undesired behaviour.
 var DefaultTimeout = 60 * time.Second
 
 // DialOpt configures DialContext.
@@ -44,6 +41,33 @@ func (conn *Conn) Close() {
 
 // StartTLS sends the command to start a TLS session and then creates a new TLS Client
 func (conn *Conn) StartTLS(config *tls.Config) error {
+	return nil
+}
+
+// DigestMD5Bind performs the digest-md5 bind operation defined in the given request.
+func (l *Conn) DigestMD5Bind(username, password string) (err error) {
+	defer Recover(&err)
+
+	params := NewClientConnParams()
+	defer DeleteClientConnParams(params)
+
+	params.SetBinddn(username)
+	params.SetBindpw(password)
+	params.SetNettimeout(conn.netTimeout)
+	params.SetTimelimit(conn.timeLimit)
+	params.SetSecured(true)
+	params.SetUse_gssapi(false)
+	params.SetUse_tls(false)
+	params.SetUse_ldaps(false)
+
+	uries := NewStringVector()
+	defer DeleteStringVector(uries)
+
+	uries.Add(conn.addr)
+	params.SetUries(uries)
+
+	conn.client.Bind(params)
+
 	return nil
 }
 
